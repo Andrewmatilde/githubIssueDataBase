@@ -10,7 +10,7 @@ import (
 func insertRepositoryData(db *sql.DB, repo *github.Repository) {
 	_, err := db.Exec(`INSERT INTO REPOSITORY (ID,OWNER, REPO_NAME) VALUES (?,?,?)`, *repo.ID, *repo.Owner.Login, *repo.Name)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Insert fail while INSERT INTO REPOSITORY (ID,OWNER, REPO_NAME) VALUES", err)
 	}
 }
 
@@ -30,7 +30,7 @@ func insertIssueData(db *sql.Tx, repo *github.Repository, issueWithComment *craw
 		issueWithComment.Number, *repo.ID, issueWithComment.Closed,
 		closeAt, issueWithComment.CreatedAt.Time, issueWithComment.Title)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Insert fail while INSERT INTO ISSUE ", err)
 	}
 }
 
@@ -40,7 +40,7 @@ func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository
 			`INSERT INTO LABEL (NAME) VALUES (?);`,
 			node.Name)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("INSERT INTO LABEL", err)
 		}
 
 		_, err = db.Exec(
@@ -51,7 +51,7 @@ func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository
 				                   and ISSUE.NUMBER = ?;`,
 			node.Name, *repo.ID, issueWithComments.Number)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("INSERT INTO LABEL_ISSUE_RELATIONSHIP ", err)
 		}
 	}
 
@@ -63,7 +63,7 @@ func insertUserDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository,
 			`INSERT INTO USER (LOGIN_NAME, EMAIL)VALUES (?,?);`,
 			node.Login, node.Email)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("INSERT INTO USER ", err)
 		}
 
 		_, err = db.Exec(
@@ -74,7 +74,7 @@ func insertUserDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository,
 				                   and ISSUE.NUMBER = ?;`,
 			node.Login, *repo.ID, issueWithComments.Number)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("INSERT INTO ASSIGNEE ", err)
 		}
 	}
 }
@@ -86,7 +86,7 @@ func insertCommentData(db *sql.Tx, repo *github.Repository, issueWithComments cr
 		             and ISSUE.NUMBER = ?;`,
 		issueWithComments.Body, *repo.ID, issueWithComments.Number)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("INSERT INTO COMMENT ", err)
 	}
 
 	for _, comment := range *issueWithComments.Comments {
@@ -96,7 +96,7 @@ func insertCommentData(db *sql.Tx, repo *github.Repository, issueWithComments cr
 		             and ISSUE.NUMBER = ?;`,
 			comment.Body, *repo.ID, issueWithComments.Number)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("INSERT INTO COMMENT ", err)
 		}
 	}
 }
