@@ -7,6 +7,7 @@ import (
 	"github.com/PingCAP-QE/libs/crawler"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/go-github/v32/github"
+	"github.com/shurcooL/githubv4"
 	"log"
 	"os"
 	"strings"
@@ -41,7 +42,7 @@ func initClient() (crawler.ClientV4, *github.Client) {
 	return clientV4, client
 }
 
-func insertData(owner, repoName string) {
+func insertData(owner, repoName string, since githubv4.DateTime) {
 	clientV4, client := initClient()
 
 	repo, _, err := client.Repositories.Get(context.Background(), owner, repoName)
@@ -51,7 +52,7 @@ func insertData(owner, repoName string) {
 
 	insertRepositoryData(db, repo)
 
-	issueWithComments, errs := crawler.FetchIssueWithCommentsByLabels(clientV4, owner, repoName, []string{"type/bug"})
+	issueWithComments, errs := crawler.FetchIssueWithCommentsByLabels(clientV4, owner, repoName, []string{"type/bug"}, since)
 	if errs != nil {
 		log.Fatal(errs[0])
 	}
@@ -62,17 +63,31 @@ func insertData(owner, repoName string) {
 	})
 
 	for _, issueWithComment := range *issueWithComments {
+		deleteIssueData(tx, &issueWithComment)
 		insertIssueData(tx, repo, &issueWithComment)
-		insertUserDataAndRelationshipWithIssue(tx, repo, issueWithComment)
-		insertLabelDataAndRelationshipWithIssue(tx, repo, issueWithComment)
-		insertCommentData(tx, repo, issueWithComment)
+		insertUserDataAndRelationshipWithIssue(tx, &issueWithComment)
+		insertLabelDataAndRelationshipWithIssue(tx, &issueWithComment)
+		insertCommentData(tx, &issueWithComment)
+		insertCrossReferenceEvent(tx, &issueWithComment)
 	}
 	err = tx.Commit()
 	fmt.Println(err)
 }
 
 func main() {
-	t := time.Now()
-	insertData("pingcap", "tidb")
-	fmt.Println(time.Until(t))
+	insertData("pingcap", "tidb", githubv4.DateTime{})
+	fmt.Println(
+		`###########################################################################################
+init db ok
+###########################################################################################`)
+	for true {
+		time.Sleep(time.Hour)
+		insertData("pingcap", "tidb", githubv4.DateTime{Time: time.Now().AddDate(0, 0, -10)})
+		fmt.Printf(
+			`###########################################################################################
+update database %v
+###########################################################################################
+`, time.Now())
+	}
+
 }
