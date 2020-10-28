@@ -25,8 +25,9 @@ func insertIssueData(db *sql.Tx, repo *github.Repository, issueWithComment *craw
 
 	_, err := db.Exec(
 		`INSERT INTO ISSUE 
-    	(NUMBER, REPOSITORY_ID, CLOSED, CLOSED_AT, CREATED_AT, TITLE) 
-    	VALUES (?,?,?,?,?,?);`,
+    	(ID,NUMBER, REPOSITORY_ID, CLOSED, CLOSED_AT, CREATED_AT, TITLE) 
+    	VALUES (?,?,?,?,?,?,?);`,
+		issueWithComment.DatabaseId,
 		issueWithComment.Number, *repo.ID, issueWithComment.Closed,
 		closeAt, issueWithComment.CreatedAt.Time, issueWithComment.Title)
 	if err != nil {
@@ -34,7 +35,7 @@ func insertIssueData(db *sql.Tx, repo *github.Repository, issueWithComment *craw
 	}
 }
 
-func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository, issueWithComments crawler.IssueWithComments) {
+func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, issueWithComments *crawler.IssueWithComments) {
 	for _, node := range issueWithComments.Labels.Nodes {
 		_, err := db.Exec(
 			`INSERT INTO LABEL (NAME) VALUES (?);`,
@@ -45,11 +46,9 @@ func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository
 
 		_, err = db.Exec(
 			`INSERT INTO LABEL_ISSUE_RELATIONSHIP (LABEL_ID, ISSUE_ID)
-				SELECT LABEL.ID,ISSUE.ID 
-				FROM LABEL,ISSUE where LABEL.NAME = ? 
-				                   and ISSUE.REPOSITORY_ID = ? 
-				                   and ISSUE.NUMBER = ?;`,
-			node.Name, *repo.ID, issueWithComments.Number)
+				SELECT LABEL.ID,?
+				FROM LABEL where LABEL.NAME = ?;`,
+			issueWithComments.DatabaseId, node.Name)
 		if err != nil {
 			fmt.Println("INSERT INTO LABEL_ISSUE_RELATIONSHIP ", err)
 		}
@@ -57,7 +56,7 @@ func insertLabelDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository
 
 }
 
-func insertUserDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository, issueWithComments crawler.IssueWithComments) {
+func insertUserDataAndRelationshipWithIssue(db *sql.Tx, issueWithComments *crawler.IssueWithComments) {
 	for _, node := range issueWithComments.Assignees.Nodes {
 		_, err := db.Exec(
 			`INSERT INTO USER (LOGIN_NAME, EMAIL)VALUES (?,?);`,
@@ -68,34 +67,45 @@ func insertUserDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository,
 
 		_, err = db.Exec(
 			`INSERT INTO ASSIGNEE (USER_ID, ISSUE_ID)
-				SELECT USER.ID,ISSUE.ID 
-				from USER,ISSUE where USER.LOGIN_NAME = ?
-				                   and ISSUE.REPOSITORY_ID = ? 
-				                   and ISSUE.NUMBER = ?;`,
-			node.Login, *repo.ID, issueWithComments.Number)
+				SELECT USER.ID,?
+				from USER where USER.LOGIN_NAME = ?;`,
+			issueWithComments.DatabaseId, node.Login)
 		if err != nil {
 			fmt.Println("INSERT INTO ASSIGNEE ", err)
 		}
 	}
 }
 
-func insertCommentData(db *sql.Tx, repo *github.Repository, issueWithComments crawler.IssueWithComments) {
-	stmt, err := db.Prepare(`INSERT INTO COMMENT (ISSUE_ID, BODY)
-		SELECT ISSUE.ID, ? 
-		FROM ISSUE where ISSUE.REPOSITORY_ID = ? 
-		             and ISSUE.NUMBER = ?;`)
+func insertCommentData(db *sql.Tx, issueWithComments *crawler.IssueWithComments) {
+	stmt, err := db.Prepare(`INSERT INTO COMMENT (ISSUE_ID, BODY) VALUES (?,?)`)
 	if err != nil {
 		fmt.Println("INSERT INTO COMMENT ", err)
 		return
 	}
-	_, err = stmt.Exec(issueWithComments.Body, *repo.ID, issueWithComments.Number)
+	_, err = stmt.Exec(issueWithComments.DatabaseId, issueWithComments.Body)
 	if err != nil {
 		fmt.Println("INSERT INTO COMMENT ", err)
 	}
 	for _, comment := range *issueWithComments.Comments {
-		_, err := stmt.Exec(comment.Body, *repo.ID, issueWithComments.Number)
+		_, err := stmt.Exec(issueWithComments.DatabaseId, comment.Body)
 		if err != nil {
 			fmt.Println("INSERT INTO COMMENT ", err)
+		}
+	}
+}
+
+func insertCrossReferenceEvent(db *sql.Tx, issueWithComments *crawler.IssueWithComments) {
+	for _, Node := range (*issueWithComments).TimelineItems.Nodes {
+		if Node.Typename == "CrossReferenceEvent" {
+			_, err := db.Exec(`INSERT INTO Cross_Referenced_Event (USER_ID,CREATE_AT,ISSUE_ID) 		
+				SELECT USER.ID,?,?
+				from USER where USER.LOGIN_NAME = ?;`,
+				Node.CrossReferencedEvent.CreatedAt.Time,
+				issueWithComments.DatabaseId,
+				Node.CrossReferencedEvent.Actor.Login)
+			if err != nil {
+				fmt.Println("INSERT INTO COMMENT ", err)
+			}
 		}
 	}
 }
