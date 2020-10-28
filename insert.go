@@ -80,21 +80,20 @@ func insertUserDataAndRelationshipWithIssue(db *sql.Tx, repo *github.Repository,
 }
 
 func insertCommentData(db *sql.Tx, repo *github.Repository, issueWithComments crawler.IssueWithComments) {
-	_, err := db.Exec(`INSERT INTO COMMENT (ISSUE_ID, BODY)
+	stmt, err := db.Prepare(`INSERT INTO COMMENT (ISSUE_ID, BODY)
 		SELECT ISSUE.ID, ? 
 		FROM ISSUE where ISSUE.REPOSITORY_ID = ? 
-		             and ISSUE.NUMBER = ?;`,
-		issueWithComments.Body, *repo.ID, issueWithComments.Number)
+		             and ISSUE.NUMBER = ?;`)
+	if err != nil {
+		fmt.Println("INSERT INTO COMMENT ", err)
+		return
+	}
+	_, err = stmt.Exec(issueWithComments.Body, *repo.ID, issueWithComments.Number)
 	if err != nil {
 		fmt.Println("INSERT INTO COMMENT ", err)
 	}
-
 	for _, comment := range *issueWithComments.Comments {
-		_, err := db.Exec(`INSERT INTO COMMENT (ISSUE_ID, BODY)
-		SELECT ISSUE.ID, ? 
-		FROM ISSUE where ISSUE.REPOSITORY_ID = ? 
-		             and ISSUE.NUMBER = ?;`,
-			comment.Body, *repo.ID, issueWithComments.Number)
+		_, err := stmt.Exec(comment.Body, *repo.ID, issueWithComments.Number)
 		if err != nil {
 			fmt.Println("INSERT INTO COMMENT ", err)
 		}
