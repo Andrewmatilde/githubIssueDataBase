@@ -30,7 +30,7 @@ func init() {
 		fmt.Println("open database fail")
 		return
 	}
-	fmt.Println("connnect success")
+	fmt.Println("connect success")
 }
 
 func initClient() (crawler.ClientV4, *github.Client) {
