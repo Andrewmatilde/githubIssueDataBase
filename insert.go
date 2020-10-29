@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/PingCAP-QE/libs/crawler"
 	"github.com/google/go-github/v32/github"
+	"time"
 )
 
 func insertRepositoryData(db *sql.DB, repo *github.Repository) {
@@ -108,4 +109,55 @@ func insertCrossReferenceEvent(db *sql.Tx, issueWithComments *crawler.IssueWithC
 			}
 		}
 	}
+}
+
+func insertAssignedIssueNumTimeLine(db *sql.Tx, repo *github.Repository, issueWithComments *[]crawler.IssueWithComments) {
+	repoCreateTime := ParseDate(repo.CreatedAt.Time)
+	assignedIssueNumTimeLine := time.Now().Sub(repoCreateTime)
+	hours := assignedIssueNumTimeLine.Hours()
+	assignedIssueNums := make([]int, int(hours/24)+1)
+	dateTimes := make([]time.Time, int(hours/24)+1)
+	for tempTime, i := repoCreateTime, 0; i < len(assignedIssueNums); i++ {
+		dateTimes[i] = tempTime
+		for _, issueWithComment := range *issueWithComments {
+			if issueNumAssignBeforeDateTime(tempTime, &issueWithComment) {
+				assignedIssueNums[i]++
+			}
+		}
+		tempTime = tempTime.AddDate(0, 0, 1)
+	}
+	_, err := db.Exec(`INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE (DATETIME,ASSIGNED_ISSUE_NUM) VALUES (?,?)`, dateTimes, assignedIssueNums)
+	if err != nil {
+		fmt.Println("INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE ", err)
+	}
+}
+
+func issueNumAssignBeforeDateTime(dateTime time.Time, issueWithComment *crawler.IssueWithComments) bool {
+
+	assigneeMap := make(map[string]bool)
+	if issueWithComment.CreatedAt.Before(dateTime) {
+		for _, node := range issueWithComment.TimelineItems.Nodes {
+			switch node.Typename {
+			case "AssignedEvent":
+				if node.AssignedEvent.CreatedAt.Before(dateTime) {
+					assigneeMap[string(node.AssignedEvent.Assignee.User.Login)] = true
+				}
+			case "UnassignedEvent":
+				if node.UnassignedEvent.CreatedAt.Before(dateTime) {
+					assigneeMap[string(node.AssignedEvent.Assignee.User.Login)] = false
+				}
+			}
+		}
+	}
+	for _, Assigned := range assigneeMap {
+		if Assigned {
+			return true
+		}
+	}
+	return false
+}
+
+func ParseDate(t time.Time) time.Time {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

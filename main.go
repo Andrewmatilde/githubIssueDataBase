@@ -44,12 +44,10 @@ func initClient() (crawler.ClientV4, *github.Client) {
 
 func insertData(owner, repoName string, since githubv4.DateTime) {
 	clientV4, client := initClient()
-
 	repo, _, err := client.Repositories.Get(context.Background(), owner, repoName)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	insertRepositoryData(db, repo)
 
 	issueWithComments, errs := crawler.FetchIssueWithCommentsByLabels(clientV4, owner, repoName, []string{"type/bug"}, since)
@@ -70,6 +68,8 @@ func insertData(owner, repoName string, since githubv4.DateTime) {
 		insertCommentData(tx, &issueWithComment)
 		insertCrossReferenceEvent(tx, &issueWithComment)
 	}
+	insertAssignedIssueNumTimeLine(tx, repo, issueWithComments)
+
 	err = tx.Commit()
 	fmt.Println(err)
 }
