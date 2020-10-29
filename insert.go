@@ -116,19 +116,17 @@ func insertAssignedIssueNumTimeLine(db *sql.Tx, repo *github.Repository, issueWi
 	assignedIssueNumTimeLine := time.Now().Sub(repoCreateTime)
 	hours := assignedIssueNumTimeLine.Hours()
 	assignedIssueNums := make([]int, int(hours/24)+1)
-	dateTimes := make([]time.Time, int(hours/24)+1)
-	for tempTime, i := repoCreateTime, 0; i < len(assignedIssueNums); i++ {
-		dateTimes[i] = tempTime
+	for tempTime, i := repoCreateTime, 0; i < int(hours/24)+1; i++ {
 		for _, issueWithComment := range *issueWithComments {
 			if issueNumAssignBeforeDateTime(tempTime, &issueWithComment) {
 				assignedIssueNums[i]++
 			}
 		}
+		_, err := db.Exec(`INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE (DATETIME,ASSIGNED_ISSUE_NUM) VALUES (?,?)`, tempTime, assignedIssueNums[i])
+		if err != nil {
+			fmt.Println("INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE ", err)
+		}
 		tempTime = tempTime.AddDate(0, 0, 1)
-	}
-	_, err := db.Exec(`INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE (DATETIME,ASSIGNED_ISSUE_NUM) VALUES (?,?)`, dateTimes, assignedIssueNums)
-	if err != nil {
-		fmt.Println("INSERT INTO ASSIGNED_ISSUE_NUM_TIMELINE ", err)
 	}
 }
 
